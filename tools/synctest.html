@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sync test</title>
+<!-- Two copies of the room side by side, like Lively's two screens. See tools/synctest.js. -->
+<style>body { margin: 0; display: flex; } iframe { width: 50vw; height: 100vh; border: 0; }</style>
+<iframe id="b"></iframe><iframe id="a"></iframe>
+<script>
+  const q = '../index.html?sync&helperPort=' + (new URLSearchParams(location.search).get('helperPort') || 38999) + '&synctest=';
+  document.getElementById('b').src = q + 'b';
+  setTimeout(() => (document.getElementById('a').src = q + 'a'), 3000);
+</script>

@@ -1,0 +1,10 @@
+# your personal content and machine-specific files
+assets/manifest.js
+assets/embedded.js
+assets/photos/*
+!assets/photos/.gitkeep
+assets/music/*
+!assets/music/.gitkeep
+helper/token.js
+.claude/settings.local.json
+__pycache__/

@@ -1,0 +1,96 @@
+{
+  "lat": {
+    "type": "textbox",
+    "value": "",
+    "text": "Latitude (blank = auto-detect)"
+  },
+  "lon": {
+    "type": "textbox",
+    "value": "",
+    "text": "Longitude (blank = auto-detect)"
+  },
+  "tempUnit": {
+    "type": "dropdown",
+    "value": 0,
+    "text": "Temperature",
+    "items": [
+      "Celsius",
+      "Fahrenheit"
+    ]
+  },
+  "focusMin": {
+    "type": "slider",
+    "value": 25,
+    "min": 5,
+    "max": 90,
+    "step": 5,
+    "text": "Focus minutes"
+  },
+  "breakMin": {
+    "type": "slider",
+    "value": 5,
+    "min": 1,
+    "max": 30,
+    "step": 1,
+    "text": "Break minutes"
+  },
+  "angryAfterMin": {
+    "type": "slider",
+    "value": 90,
+    "min": 15,
+    "max": 240,
+    "step": 15,
+    "text": "Cat gets angry after (min idle)"
+  },
+  "catUrl": {
+    "type": "textbox",
+    "value": "claude://",
+    "text": "Cat click opens (URL / protocol)"
+  },
+  "streamUrl": {
+    "type": "textbox",
+    "value": "",
+    "text": "Music stream URL (blank = built-in lofi)"
+  },
+  "musicVolume": {
+    "type": "slider",
+    "value": 60,
+    "min": 0,
+    "max": 100,
+    "step": 5,
+    "text": "Music volume"
+  },
+  "pixelScale": {
+    "type": "slider",
+    "value": 0,
+    "min": 0,
+    "max": 8,
+    "step": 1,
+    "text": "Pixel size (0 = auto)"
+  },
+  "showHud": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Show timer & tasks panel"
+  },
+  "calendarIcs": {
+    "type": "textbox",
+    "value": "",
+    "text": "Google Calendar link (Settings \u2192 your calendar \u2192 Secret address in iCal format)"
+  },
+  "outlookIcs": {
+    "type": "textbox",
+    "value": "",
+    "text": "Outlook calendar link (Settings \u2192 Calendar \u2192 Shared calendars \u2192 Publish \u2192 ICS)"
+  },
+  "vibeLights": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Lights follow the music's vibe"
+  },
+  "photosAlbum": {
+    "type": "textbox",
+    "value": "",
+    "text": "Google Photos shared album link (photos.app.goo.gl/...)"
+  }
+}

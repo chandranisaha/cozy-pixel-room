@@ -1,0 +1,14 @@
+{
+  "AppVersion": "1.0.0.0",
+  "Title": "Cozy Pixel Room",
+  "Thumbnail": "preview.png",
+  "Preview": "preview.png",
+  "Desc": "Interactive lofi pixel bedroom: live weather window, focus timer with a study buddy, tasks that crumple into a bin, a plant that grows with your work, your calendar, photos and sticky notes, and a cat that opens Claude.",
+  "Author": "Chandrani Saha",
+  "License": "MIT",
+  "Contact": "https://github.com/chandranisaha/cozy-pixel-room",
+  "Type": 2,
+  "FileName": "index.html",
+  "Arguments": null,
+  "IsAbsolutePath": false
+}

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cozy Pixel Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #fff3d6; --dim: #c9bfe0; --panel: rgba(28, 24, 52, 0.82); --edge: #6a5fa8;
+    --accent: #f7c86b; --hot: #ff8a7a; --ok: #8fd6a8;
+    --font: 'VT323', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1830; color: var(--ink); font-family: var(--font); }
+  #room { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  [hidden] { display: none !important; }
+
+  /* pixel-ish panel */
+  .px { background: var(--panel); border: 2px solid var(--edge); box-shadow: 0 0 0 2px #1b1830, 4px 4px 0 2px rgba(0,0,0,0.35); }
+  button { font: inherit; color: var(--ink); background: #3a3270; border: 2px solid var(--edge); padding: 2px 10px; cursor: pointer; font-size: 20px; line-height: 1; }
+  button:hover { background: #4a408a; }
+  button:active { transform: translateY(1px); }
+
+  #hud { position: fixed; right: 24px; bottom: 64px; width: 280px; font-size: 20px; padding: 12px 14px; user-select: none; }
+  #hud.collapsed .body { display: none; }
+  #hud.collapsed { width: auto; padding: 6px 8px; }
+  #hud .top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  #hudToggle { padding: 0 8px; }
+  #wx { color: var(--dim); font-size: 18px; }
+  #np { color: var(--accent); font-size: 18px; min-height: 18px; }
+  .pomo { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 4px; }
+  #pomoTime { font-size: 48px; line-height: 1; letter-spacing: 1px; }
+  #pomoMode { color: var(--dim); text-transform: uppercase; font-size: 18px; }
+  #hud.focusing #pomoTime { color: var(--accent); }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  #stats { color: var(--dim); font-size: 16px; margin-top: 6px; }
+  h3 { margin: 12px 0 4px; font-weight: normal; font-size: 20px; color: var(--accent); display: flex; justify-content: space-between; }
+  h3 small { color: var(--dim); font-size: 16px; }
+  #taskForm { display: flex; gap: 6px; }
+  #taskInput { flex: 1; min-width: 0; font: inherit; font-size: 20px; color: var(--ink); background: #241f45; border: 2px solid var(--edge); padding: 2px 6px; }
+  #taskList { list-style: none; margin: 6px 0 0; padding: 0; max-height: 200px; overflow-y: auto; }
+  #taskList li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  #taskList li span { flex: 1; cursor: pointer; overflow-wrap: anywhere; }
+  #taskList li.done span { text-decoration: line-through; color: var(--dim); }
+  #taskList .check { width: 22px; height: 22px; padding: 0; font-size: 16px; color: var(--ok); }
+  #taskList .del { padding: 0 6px; background: transparent; border-color: transparent; color: var(--dim); }
+  #clearDone { font-size: 16px; padding: 0 6px; }
+
+  #tip { position: fixed; pointer-events: none; padding: 2px 8px; font-size: 18px; z-index: 5; }
+  #catSay { position: fixed; transform: translate(-50%, -100%); padding: 4px 12px; font-size: 20px; z-index: 5; pointer-events: none; max-width: 260px; text-align: center; }
+  #catSay::after { content: ''; position: absolute; left: 50%; bottom: -10px; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--edge); }
+  #panel img.memory { display: block; max-width: 100%; max-height: 52vh; margin: 4px auto 8px; border: 8px solid #f7f2ea; border-bottom-width: 28px; transform: rotate(-1.5deg); }
+  #panel img.memory.pixel { image-rendering: pixelated; width: 320px; }
+  #toast { position: fixed; left: 50%; top: 28px; transform: translateX(-50%); padding: 6px 16px; font-size: 22px; z-index: 6; max-width: 80vw; text-align: center; }
+
+  #lightbox { position: fixed; inset: 0; background: rgba(10, 8, 24, 0.7); display: grid; place-items: center; z-index: 10; }
+  #lightbox .paper { position: relative; background: #f7f2ea; padding: 18px 18px 14px; max-width: min(70vw, 720px); box-shadow: 8px 8px 0 rgba(0,0,0,0.4); transform: rotate(-1.5deg); }
+  #lightbox .paper.photo { padding: 8px; }
+  #lightbox img { display: block; max-width: 100%; max-height: 64vh; min-width: 320px; }
+  #lightbox img.pixel { image-rendering: pixelated; width: 420px; }
+  #lightbox .cap { color: #4b4876; font-size: 28px; text-align: center; margin-top: 8px; }
+  #lightbox textarea { width: 360px; height: 280px; max-width: 70vw; background: transparent; border: 0; outline: 0; resize: none; font: inherit; font-size: 32px; color: #3a3560; line-height: 1.15; }
+  #lightbox .close { position: absolute; top: -14px; right: -14px; padding: 0 8px; }
+
+  /* pop-up panel: crate, calendar, letters, bin, good night */
+  #panel { position: fixed; inset: 0; background: rgba(10, 8, 24, 0.55); display: grid; place-items: center; z-index: 9; }
+  #panel .box { width: min(520px, 86vw); max-height: 78vh; overflow: auto; padding: 14px 18px 16px; font-size: 21px; }
+  #panel .phead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  #panel .ptitle { color: var(--accent); font-size: 28px; }
+  #panel .pclose { padding: 0 8px; }
+  #panel h4 { margin: 12px 0 4px; font-weight: normal; color: var(--accent); font-size: 22px; }
+  #panel p { margin: 4px 0; }
+  #panel ol { margin: 4px 0; padding-left: 22px; }
+  #panel .dim { color: var(--dim); }
+  #panel .warn { color: var(--hot); }
+  #panel .headline { font-size: 24px; }
+  #panel .prow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  #panel .nowplaying { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--dim); }
+  #panel .nowplaying .np-title { margin-bottom: 2px; }
+  #panel .nowplaying .prow { margin-top: 4px; }
+  #panel ul.agenda, #panel ul.brief { list-style: none; margin: 4px 0; padding: 0; }
+  #panel ul.agenda li, #panel ul.brief li { padding: 2px 0; }
+  #panel ul.agenda b { color: var(--accent); font-weight: normal; margin-right: 6px; }
+  #panel ul.agenda .src { font-size: 0.75em; padding: 0 4px; border-radius: 3px; opacity: 0.75; }
+  #panel ul.agenda .src.google { background: #4285f433; }
+  #panel ul.agenda .src.outlook { background: #0f6cbd33; }
+  #panel ul.agenda li.past { color: var(--dim); text-decoration: line-through; }
+  #panel ul.brief b { display: inline-block; width: 18px; text-align: center; }
+  #panel ul.brief li.attention b { color: var(--hot); }
+  #panel ul.brief li.sorted b { color: var(--ok); }
+  #panel button.x { padding: 0 6px; background: transparent; border-color: transparent; color: var(--dim); }
+  #panel .remform { display: flex; gap: 6px; margin-top: 8px; }
+  #panel .remform input { flex: 1; min-width: 0; font: inherit; font-size: 20px; color: var(--ink); background: #241f45; border: 2px solid var(--edge); padding: 2px 6px; }
+  #panel .remform input.when { flex: 0 0 110px; }
+  .crate { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .sleeve { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; font-size: 18px; text-align: center; }
+  .sleeve.on { border-color: var(--accent); background: #4a408a; }
+  .sleeve small { color: var(--dim); font-size: 15px; }
+  .sleeve-art { width: 72px; height: 72px; image-rendering: pixelated; box-shadow: 3px 3px 0 rgba(0,0,0,0.35); }
+</style>
+</head>
+<body>
+<canvas id="room"></canvas>
+
+<div id="hud" class="px">
+  <div class="top">
+    <div>
+      <div id="wx">…</div>
+      <div id="np"></div>
+    </div>
+    <button id="hudToggle" title="show / hide">≡</button>
+  </div>
+  <div class="body">
+    <div class="pomo"><span id="pomoTime">25:00</span><span id="pomoMode">ready</span></div>
+    <div class="row">
+      <button id="pomoStart">focus</button>
+      <button id="pomoSkip" title="skip to next phase">skip</button>
+      <button id="pomoStop">stop</button>
+    </div>
+    <div id="stats"></div>
+    <h3>tasks <small><span id="taskCount"></span> <button id="clearDone" title="clear finished">clear ✓</button></small></h3>
+    <form id="taskForm" autocomplete="off">
+      <input id="taskInput" placeholder="add a task…" maxlength="80">
+      <button type="submit">+</button>
+    </form>
+    <ul id="taskList"></ul>
+  </div>
+</div>
+
+<div id="tip" class="px" hidden></div>
+<div id="toast" class="px" hidden></div>
+<div id="panel" hidden>
+  <div class="box px">
+    <div class="phead"><span class="ptitle"></span><button class="pclose">×</button></div>
+    <div class="pbody"></div>
+  </div>
+</div>
+<div id="lightbox" hidden>
+  <div class="paper">
+    <button class="close">×</button>
+    <img alt="">
+    <div class="cap"></div>
+    <textarea spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="assets/manifest.example.js"></script>
+<script src="assets/manifest.js" onerror="/* optional: your own copy of manifest.example.js */"></script>
+<script src="assets/embedded.js" onerror="window.EMBEDDED={}"></script>
+<script src="helper/token.js" onerror="window.COZY_TOKEN=''"></script>
+<script src="js/util.js"></script>
+<script src="js/helper.js"></script>
+<script src="js/sync.js"></script>
+<script>
+  // the room is built only after the shared state has arrived from the helper (js/sync.js)
+  R.sync.hydrate().then(() => {
+    ['audio', 'scene', 'weather', 'clock', 'music', 'crate', 'vibe', 'windowfx', 'rug', 'photos', 'wall', 'stickies', 'books', 'calendar', 'pomodoro', 'tasks', 'bin', 'drawers', 'plant', 'cat', 'messages', 'bed', 'girl', 'main'].forEach(n => {
+      const el = document.createElement('script'); el.src = 'js/' + n + '.js'; el.async = false; document.body.appendChild(el);
+    });
+  });
+</script>
+</body>
+</html>
