@@ -12,7 +12,11 @@
       .then(r => {
         H.ok = true;                              // it answered, even if with an error
         return r.json().then(j => { if (!r.ok) throw new Error(j.error || r.status); return j; });
-      }, e => { H.ok = false; throw e; })
+      }, e => {
+        // our own timeout means it's busy with something slow (Spotify, cover art), not gone
+        if (!(e && e.name === 'AbortError')) H.ok = false;
+        throw e.name === 'AbortError' ? new Error('the helper is busy, try again in a moment') : e;
+      })
       .then(j => { if (j && 'iconsVisible' in j) H.state = j; return j; })
       .finally(() => clearTimeout(t));
   };

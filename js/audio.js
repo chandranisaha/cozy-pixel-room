@@ -84,6 +84,46 @@
     });
     return { gain: g, stop: () => { stop(); cars(); hum.s.stop(); } };
   };
+  // ---------- the tape drawer's ambience loops ----------
+  S.fire = (dest) => {
+    const ac = R.ac(), g = out(ac, dest);
+    const roar = loopNoise(ac, g, 'lowpass', 380, 0.4, 0.55);
+    const crackle = every(110, () => { if (Math.random() < 0.7) burst(ac, g, ac.currentTime, 0.012 + Math.random() * 0.03, 'bandpass', 1500 + Math.random() * 3500, 0.12 + Math.random() * 0.25, 1.4); });
+    const pops = every(2600, () => { const t = ac.currentTime; burst(ac, g, t, 0.05, 'bandpass', 900, 0.4, 2); burst(ac, g, t + 0.03, 0.12, 'highpass', 3000, 0.08); });
+    return { gain: g, stop: () => { crackle(); pops(); roar.s.stop(); } };
+  };
+  S.cafe = (dest) => {
+    const ac = R.ac(), g = out(ac, dest);
+    const murmur = loopNoise(ac, g, 'bandpass', 480, 1.1, 0.7);
+    const m2 = loopNoise(ac, g, 'bandpass', 900, 1.4, 0.25);
+    const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 0.35; lg.gain.value = 0.25; lfo.connect(lg); lg.connect(murmur.v.gain); lfo.start();
+    const clinks = every(3200, () => { const t = ac.currentTime, f = 2200 + Math.random() * 1400; blip(ac, g, f, t, 0.35, 0.03, 'triangle'); if (Math.random() < 0.5) blip(ac, g, f * 1.02, t + 0.09, 0.25, 0.02, 'triangle'); });
+    return { gain: g, stop: () => { clinks(); lfo.stop(); murmur.s.stop(); m2.s.stop(); } };
+  };
+  S.keys = (dest) => {
+    const ac = R.ac(), g = out(ac, dest);
+    let alive = true;
+    (function word() {
+      if (!alive) return;
+      const t = ac.currentTime, n = 3 + Math.floor(Math.random() * 6);
+      for (let i = 0; i < n; i++) {
+        const at = t + i * (0.07 + Math.random() * 0.06);
+        burst(ac, g, at, 0.018, 'bandpass', 2200 + Math.random() * 1600, 0.22, 2.5);
+        burst(ac, g, at + 0.004, 0.03, 'lowpass', 500, 0.12);
+      }
+      if (Math.random() < 0.15) burst(ac, g, t + n * 0.1 + 0.05, 0.05, 'lowpass', 300, 0.3);   // the space bar
+      setTimeout(word, n * 100 + 120 + Math.random() * (Math.random() < 0.2 ? 1800 : 300));
+    })();
+    return { gain: g, stop: () => (alive = false) };
+  };
+  S.waves = (dest) => {
+    const ac = R.ac(), g = out(ac, dest);
+    const sea = loopNoise(ac, g, 'lowpass', 650, 0.5, 0.3);
+    const fizz = loopNoise(ac, g, 'highpass', 3500, 0.4, 0.05);
+    const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 0.09; lg.gain.value = 0.28; lfo.connect(lg); lg.connect(sea.v.gain); lg.connect(fizz.v.gain); lfo.start();
+    const lf2 = ac.createOscillator(), l2 = ac.createGain(); lf2.frequency.value = 0.09; l2.gain.value = 350; lf2.connect(l2); l2.connect(sea.f.frequency); lf2.start();
+    return { gain: g, stop: () => { lfo.stop(); lf2.stop(); sea.s.stop(); fizz.s.stop(); } };
+  };
   S.brown = (dest) => {
     const ac = R.ac(), g = out(ac, dest);
     const a = loopNoise(ac, g, 'lowpass', 300, 0.3, 0.9);
@@ -145,6 +185,36 @@
     burst(ac, g, t + dur * 0.2, dur * 0.8, 'highpass', 4000, vol * 0.4);
     if (rings) for (let i = 0; i < 4; i++) blip(ac, g, 3200 + Math.random() * 900, t + i * dur / 4, 0.06, 0.03, 'triangle');
   };
+  // a magazine page turning: a papery whoosh that rises, then the page settling with a soft slap
+  // soft noise that swells in and fades out (no sharp attack): the base of the gentle paper sounds
+  function swell(ac, g, at, dur, type, freq, vol, freqTo = 0, peak = 0.4, q = 0.5) {
+    const s = ac.createBufferSource(); s.buffer = noiseBuf(ac);
+    const f = ac.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, at); f.Q.value = q;
+    if (freqTo) f.frequency.exponentialRampToValueAtTime(freqTo, at + dur);
+    const e = ac.createGain();
+    e.gain.setValueAtTime(0.0001, at); e.gain.linearRampToValueAtTime(vol, at + dur * peak); e.gain.linearRampToValueAtTime(0.0001, at + dur);
+    s.connect(f); f.connect(e); e.connect(g); s.start(at, Math.random() * 2); s.stop(at + dur + 0.02);
+  }
+  // a catalogue page turning: a soft airy "fwff" as it sweeps over, then a muffled settle
+  S.page = (vol = 1, len = 0.36) => {
+    const [ac, g, t] = shot();
+    const d = R.clamp(len, 0.25, 1) * (0.92 + Math.random() * 0.16);
+    swell(ac, g, t, d, 'lowpass', 1500 + Math.random() * 300, 0.13 * vol, 650, 0.45);
+    swell(ac, g, t + d * 0.15, d * 0.6, 'bandpass', 2600, 0.025 * vol, 1800, 0.5, 0.4);
+    swell(ac, g, t + d * 0.78, 0.16, 'lowpass', 380, 0.12 * vol, 220, 0.3);
+  };
+  // a cassette going in / out: two plastic clicks
+  S.clack = (vol = 1) => {
+    const [ac, g, t] = shot();
+    burst(ac, g, t, 0.025, 'bandpass', 2400, 0.3 * vol, 2);
+    burst(ac, g, t + 0.06, 0.035, 'bandpass', 1500, 0.35 * vol, 1.6);
+    burst(ac, g, t + 0.06, 0.06, 'lowpass', 400, 0.25 * vol);
+  };
+  // a page corner lifting under your finger: a tiny soft brush
+  S.peel = (vol = 1) => {
+    const [ac, g, t] = shot();
+    swell(ac, g, t, 0.16, 'lowpass', 1800, 0.05 * vol, 900, 0.35);
+  };
   // wooden drawer sliding open/shut
   S.drawer = open => {
     const [ac, g, t] = shot();
@@ -180,7 +250,7 @@
 
   // Lively plays sound from one screen only, so sounds you cause are replayed on the other
   // screen's copy too (whichever of the two is muted stays silent).
-  const ONE_SHOTS = ['pop', 'crumple', 'thump', 'sash', 'swish', 'drawer', 'rattle', 'crunch', 'meow'];
+  const ONE_SHOTS = ['pop', 'page', 'peel', 'clack', 'crumple', 'thump', 'sash', 'swish', 'drawer', 'rattle', 'crunch', 'meow'];
   const raw = {};
   ONE_SHOTS.forEach(n => {
     raw[n] = S[n];
