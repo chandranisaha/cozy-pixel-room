@@ -8,3 +8,6 @@ assets/music/*
 helper/token.js
 .claude/settings.local.json
 __pycache__/
+
+# cover art the helper downloads for your playlists
+assets/covers/

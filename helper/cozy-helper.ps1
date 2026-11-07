@@ -1,4 +1,4 @@
-# Cozy Pixel Room helper.
+﻿# Pixel Room helper.
 # Does what a wallpaper can't: hides/shows desktop icons (the rug), tucks single icons
 # under the rug, reads your Sticky Notes, opens links, launches Claude, and runs the
 # cat's morning brief. Listens on 127.0.0.1:38917 only and runs a fixed set of actions.
@@ -16,7 +16,10 @@
 #   /notes                     Sticky Notes                  /notes/open?id=  /notes/new
 #   /open?url=                 http(s)/spotify/mailto link or an existing folder (spotify: opens the web player if the app isn't installed)
 #   /media                     what's playing (Spotify app, Spotify in the browser, any player Windows knows)   /media/toggle|next|prev
-#   /calendar?url=             fetches an .ics feed (https only)
+#   /media/spotify             opens the Spotify app (or the web player if it isn't installed)
+#   /media/play?uri=&name=     starts a Spotify playlist (opens it, presses its Play button)
+#   /volume?app=&v=            an app's own volume (Spotify, the browser), 0..1; without v just reads it
+#   /calendar?url=             fetches an .ics feed (https only)   /calendar/clip  the calendar link on the clipboard, checked
 #   /brief                     latest morning brief          /brief/run  /brief/open
 #   /photos?url=               photos from a Google Photos shared album (cached, refreshed twice a day)
 #   /kv?since=&id=             the room's shared state (tasks, curtains, timer...) for every screen
@@ -406,6 +409,18 @@ function Get-Calendar($url) {
     @{ ics = $ics }
 }
 
+# The calendar link you just copied (Lively doesn't pass Ctrl+V to the wallpaper). Only hands
+# back something that looks like a calendar feed, never anything else on the clipboard.
+function Get-ClipCalendar {
+    $t = ([string](Get-Clipboard -Raw)).Trim()
+    if ($t -notmatch '^(https|webcal)://\S+$' -or $t -notmatch '\.ics(\?|$)|/ical/|/calendar/') { throw 'copy the calendar link first (it ends in .ics)' }
+    $url = $t -replace '^webcal:', 'https:'
+    try { $ics = (Get-Calendar $url).ics } catch { throw "couldn't load that link ($($_.Exception.Message)): copy it again from your calendar's settings" }
+    if ($ics -notmatch 'BEGIN:VCALENDAR') { $script:cal.Remove($url); throw "that link isn't a calendar feed: use the iCal / ICS address" }
+    $n = ([regex]::Matches($ics, 'BEGIN:VEVENT')).Count
+    @{ url = $url; events = $n }
+}
+
 # ---------- photos from a Google Photos shared album ----------
 # The album page lists its photos as lh3.googleusercontent.com/pw/... links. They're
 # downloaded once (resized by Google) into %LOCALAPPDATA%\CozyRoom\photos and handed to the
@@ -505,11 +520,113 @@ function Media-Session {
     if ($sp) { return $sp }
     $script:mediaMgr.GetCurrentSession()      # e.g. Spotify in Chrome
 }
+# Why nothing shows up: Spotify closed, open but signed out, or open with nothing loaded yet
+# (it only appears in Windows' media list once a song is loaded).
+$script:spotifyPkg = $null
+function Spotify-Pkg {
+    if ($null -eq $script:spotifyPkg) { $script:spotifyPkg = @(Get-AppxPackage -Name 'SpotifyAB.SpotifyMusic' -ErrorAction SilentlyContinue | Select-Object -First 1) }
+    $script:spotifyPkg | Select-Object -First 1
+}
+function Spotify-Status {
+    $pkg = Spotify-Pkg
+    $prefs = if ($pkg) { Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalState\Spotify\prefs" } else { Join-Path $env:APPDATA 'Spotify\prefs' }
+    $installed = [bool]$pkg -or (Test-Path (Join-Path $env:APPDATA 'Spotify\Spotify.exe'))
+    if (-not $installed) { return 'missing' }
+    if (-not (Get-Process Spotify -ErrorAction SilentlyContinue)) { return 'closed' }
+    if (-not ((Test-Path $prefs) -and (Select-String -Path $prefs -Pattern '^autologin\.' -Quiet))) { return 'signedout' }
+    'idle'
+}
+function Open-Spotify {
+    $pkg = Spotify-Pkg
+    $exe = Join-Path $env:APPDATA 'Spotify\Spotify.exe'
+    if ($pkg) { Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!Spotify" }
+    elseif (Test-Path $exe) { Start-Process $exe }
+    else { Start-Process 'https://open.spotify.com'; return @{ opened = 'web' } }
+    @{ opened = 'app' }
+}
+# Start a playlist in the Spotify app: open it, then press Spotify's own "Play <name>" button
+# (through UI Automation, like the Sticky Notes buttons). That replaces whatever was queued,
+# so the old record stops and the new one starts. If Spotify wasn't on screen before, it's
+# minimised again afterwards so the room stays in front.
+Add-Type -Namespace Cozy -Name Win -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int cmd); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();'
+function Spotify-Window { Get-Process Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1 }
+function Norm-Name($s) { (([string]$s) -replace '[\u2018\u2019]', "'" -replace '[\u201C\u201D]', '"' -replace '\s+', ' ').Trim().ToLowerInvariant() }
+function Play-Spotify($uri, $name) {
+    if ($uri -notmatch '^spotify:(playlist|album|artist):[A-Za-z0-9]{22}$') { throw 'not a Spotify playlist/album link' }
+    if (-not $name) { throw 'name missing' }
+    $w0 = Spotify-Window
+    $wasFront = $w0 -and ([Cozy.Win]::GetForegroundWindow() -eq $w0.MainWindowHandle)
+    if (-not (Get-Process Spotify -ErrorAction SilentlyContinue)) { [void](Open-Spotify); Start-Sleep -Seconds 3 }
+    else {      # the old record stops right away, not when the new one gets going
+        try { $s = Media-Session; if ($s -and $s.SourceAppUserModelId -match 'Spotify' -and $s.GetPlaybackInfo().PlaybackStatus.ToString() -eq 'Playing') { [void](Await-WinRT ($s.TryPauseAsync()) ([bool])) } } catch { }
+    }
+    Start-Process $uri
+    $btnType = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+    # A press can get lost while Spotify is still restoring its window or switching pages, so
+    # each press is checked (Windows' media session says Playing) and retried. The same name is
+    # on the playlist page's big button and on the library sidebar: the biggest goes first, and
+    # retries take turns between them in case the page never switched.
+    $deadline = (Get-Date).AddSeconds(20); $result = $null; $tries = 0
+    while (-not $result -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 700
+        $w = Spotify-Window
+        if (-not $w) { continue }
+        try {
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($w.MainWindowHandle)
+            $btns = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnType))
+            if ($btns | Where-Object { (Norm-Name $_.Current.Name) -eq (Norm-Name "Pause $name") } | Select-Object -First 1) { $result = 'already'; break }
+            $cands = @($btns | Where-Object { (Norm-Name $_.Current.Name) -eq (Norm-Name "Play $name") } |
+                Sort-Object { $r = $_.Current.BoundingRectangle; -($r.Width * $r.Height) })
+            # the name on Spotify's button can differ a little from ours (renamed playlist, emoji):
+            # after a few seconds take the page's big green "Play …" button (never the bare "Play"
+            # of the player bar, which would just resume the old song)
+            if (-not $cands.Count -and (Get-Date) -gt $deadline.AddSeconds(-14)) {
+                $cands = @($btns | Where-Object { $_.Current.Name -match '^Play .+' -and $_.Current.Name -notmatch '^Play (next|previous)' } |
+                    Sort-Object { $r = $_.Current.BoundingRectangle; -($r.Width * $r.Height) } | Select-Object -First 1)
+            }
+            if (-not $cands.Count) { continue }
+            $b = $cands[$tries % $cands.Count]; $tries++
+            $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+            $until = (Get-Date).AddSeconds(3)
+            do { Start-Sleep -Milliseconds 300; $m = Get-Media } while (-not $m.playing -and (Get-Date) -lt $until)
+            if ($m.playing) { $result = 'started' }
+        } catch { }
+    }
+    if (-not $result) { throw "opened $name in Spotify, but couldn't press play: press play there" }
+    if (-not $wasFront) { $w = Spotify-Window; if ($w) { Start-Sleep -Milliseconds 400; [void][Cozy.Win]::ShowWindowAsync($w.MainWindowHandle, 6) } }
+    $until = (Get-Date).AddSeconds(4)
+    do { Start-Sleep -Milliseconds 400; $m = Get-Media } while (-not $m.playing -and (Get-Date) -lt $until)   # Spotify reports the new song a moment later
+    $m.started = $result; $m
+}
 function Get-Media {
     $s = Media-Session
-    if (-not $s) { return @{ active = $false } }
+    if (-not $s) { return @{ active = $false; spotify = (Spotify-Status) } }
     $p = Await-WinRT ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
     @{ active = $true; app = [string]$s.SourceAppUserModelId; playing = ($s.GetPlaybackInfo().PlaybackStatus.ToString() -eq 'Playing'); title = [string]$p.Title; artist = [string]$p.Artist }
+}
+# The playing song's cover art for the gig poster: { ok, key, title, artist, data (jpeg base64) }.
+# Windows won't hand the thumbnail bytes to PowerShell, so it's looked up by title + artist on
+# iTunes' public search (no account). Cached per song.
+$script:artCache = @{}
+function Get-MediaArt {
+    $m = Get-Media
+    if (-not $m.active -or -not $m.title) { return @{ ok = $false } }
+    $key = "$($m.title)|$($m.artist)"
+    if ($script:artCache.ContainsKey($key)) { return $script:artCache[$key] }
+    $res = @{ ok = $false; key = $key; title = $m.title; artist = $m.artist }
+    try {
+        $title = ($m.title -replace '\s*[\(\[].*?[\)\]]', '' -replace '\s+-\s+.*$', '').Trim()
+        $term = [uri]::EscapeDataString("$title $($m.artist)")
+        $j = Invoke-RestMethod "https://itunes.apple.com/search?term=$term&entity=song&limit=1" -TimeoutSec 8
+        if ($j.resultCount -gt 0) {
+            $url = $j.results[0].artworkUrl100 -replace '100x100bb', '300x300bb'
+            $bytes = (Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 8).Content
+            $res = @{ ok = $true; key = $key; title = $m.title; artist = $m.artist; album = [string]$j.results[0].collectionName; data = [Convert]::ToBase64String($bytes) }
+        }
+    } catch { }
+    if ($script:artCache.Count -gt 40) { $script:artCache.Clear() }
+    $script:artCache[$key] = $res
+    $res
 }
 function Invoke-Media($what) {
     $s = Media-Session
@@ -518,6 +635,62 @@ function Invoke-Media($what) {
     [void](Await-WinRT $op ([bool]))
     Start-Sleep -Milliseconds 300
     Get-Media
+}
+
+# Per-app volume (what the Volume Mixer shows) for the turntable's volume knob: Spotify, or
+# the browser playing music. /volume?app=spotify reads it, &v=0..1 sets it.
+Add-Type -TypeDefinition @"
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+public static class CozyVol {
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorCo {}
+    [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator { [PreserveSig] int EnumAudioEndpoints(int a, int b, out IntPtr c); [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice dev); }
+    [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice { [PreserveSig] int Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o); }
+    [Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionManager2 { [PreserveSig] int GetAudioSessionControl(IntPtr a, int b, out IntPtr c); [PreserveSig] int GetSimpleAudioVolume(IntPtr a, int b, out IntPtr c); [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator e); }
+    [Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionEnumerator { [PreserveSig] int GetCount(out int n); [PreserveSig] int GetSession(int i, [MarshalAs(UnmanagedType.IUnknown)] out object s); }
+    [Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionControl2 {
+        [PreserveSig] int GetState(out int s); [PreserveSig] int GetDisplayName(out IntPtr p); [PreserveSig] int SetDisplayName(IntPtr a, IntPtr b);
+        [PreserveSig] int GetIconPath(out IntPtr p); [PreserveSig] int SetIconPath(IntPtr a, IntPtr b); [PreserveSig] int GetGroupingParam(out Guid g);
+        [PreserveSig] int SetGroupingParam(IntPtr a, IntPtr b); [PreserveSig] int RegisterAudioSessionNotification(IntPtr a); [PreserveSig] int UnregisterAudioSessionNotification(IntPtr a);
+        [PreserveSig] int GetSessionIdentifier(out IntPtr p); [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr p); [PreserveSig] int GetProcessId(out uint pid);
+    }
+    [Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface ISimpleAudioVolume { [PreserveSig] int SetMasterVolume(float v, ref Guid ctx); [PreserveSig] int GetMasterVolume(out float v); }
+
+    static string ProcName(uint pid) { try { return Process.GetProcessById((int)pid).ProcessName.ToLowerInvariant(); } catch { return ""; } }
+    // Volume (0..1) of every audio session whose process name contains `app`; sets it first when v >= 0. -1 = none found.
+    public static float Volume(string app, float v) {
+        app = app.ToLowerInvariant();
+        var en = (IMMDeviceEnumerator)new MMDeviceEnumeratorCo();
+        IMMDevice dev; if (en.GetDefaultAudioEndpoint(0, 1, out dev) != 0) return -1;
+        var iid = typeof(IAudioSessionManager2).GUID; object o;
+        if (dev.Activate(ref iid, 23, IntPtr.Zero, out o) != 0) return -1;
+        IAudioSessionEnumerator se; if (((IAudioSessionManager2)o).GetSessionEnumerator(out se) != 0) return -1;
+        int n; se.GetCount(out n);
+        float found = -1; var ctx = Guid.Empty;
+        for (int i = 0; i < n; i++) {
+            object s; if (se.GetSession(i, out s) != 0) continue;
+            uint pid; if (((IAudioSessionControl2)s).GetProcessId(out pid) != 0 || !ProcName(pid).Contains(app)) continue;
+            var sv = (ISimpleAudioVolume)s;
+            if (v >= 0) sv.SetMasterVolume(Math.Min(1f, v), ref ctx);
+            float cur; sv.GetMasterVolume(out cur); found = cur;
+        }
+        return found;
+    }
+}
+"@
+function Get-Volume($app, $v) {
+    if ($app -notmatch '^[a-z0-9]{2,20}$') { throw 'app must be a process name like spotify' }
+    $set = if ($null -ne $v -and $v -ne '') { [float]$v } else { -1 }
+    $cur = [CozyVol]::Volume($app, $set)
+    if ($cur -lt 0) { throw "$app isn't playing any sound" }
+    @{ app = $app; volume = [math]::Round($cur, 3) }
 }
 
 # ---------- shared room state ----------
@@ -581,12 +754,17 @@ function Invoke-Route([string]$path, $q) {
         '^/notes/new$'      { return New-Note }
         '^/open$'           { return Open-Url $q['url'] }
         '^/calendar$'       { return Get-Calendar $q['url'] }
+        '^/calendar/clip$'  { return Get-ClipCalendar }
         '^/brief$'          { return Get-Brief }
         '^/brief/run$'      { return Start-Brief }
         '^/brief/open$'     { return Open-Brief }
         '^/photos$'         { return Get-Photos $q['url'] }
         '^/media$'          { return Get-Media }
         '^/media/(toggle|next|prev)$' { return Invoke-Media $Matches[1] }
+        '^/media/spotify$'  { return Open-Spotify }
+        '^/media/art$'      { return Get-MediaArt }
+        '^/media/play$'     { return Play-Spotify $q['uri'] $q['name'] }
+        '^/volume$'         { return Get-Volume $q['app'] $q['v'] }
         '^/kv$'             { return Get-Kv ([int]$q['since']) $q['id'] }
         '^/kv/set$'         { return Set-Kv $q['k'] $q['v'] $q['id'] }
         '^/ev$'             { return Add-Event $q['name'] $q['data'] $q['id'] }
