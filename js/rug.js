@@ -135,13 +135,24 @@
     layout();
 
     // ---------- hide-all (real icons through the helper) ----------
-    function setIcons(hide) {
-      if (!R.helper.ok) {
-        if (!S.warned) { R.toast('start helper/start-helper.cmd to hide your real icons'); S.warned = true; }
-        return;
-      }
-      S.cmdAt = Date.now();
-      R.helper.call(hide ? '/icons/hide' : '/icons/show').catch(() => R.toast('helper not responding'));
+    // The helper does one thing at a time, so a command can wait behind something slow (Spotify,
+    // cover art). Keep trying for a while, and check the desktop really ended up the way we asked.
+    let cmdSeq = 0;
+    function setIcons(hide, tries = 4) {
+      const my = ++cmdSeq;
+      S.cmdBusy = true; S.cmdAt = Date.now();
+      R.helper.call(hide ? '/icons/hide' : '/icons/show', 8000)
+        .then(j => {
+          if (my !== cmdSeq) return;
+          if (j && j.iconsVisible === hide && tries > 1) return setTimeout(() => setIcons(hide, tries - 1), 400);
+          S.cmdBusy = false; S.cmdAt = Date.now();
+        })
+        .catch(e => {
+          if (my !== cmdSeq) return;
+          if (tries > 1) return setTimeout(() => setIcons(hide, tries - 1), 1200);
+          S.cmdBusy = false; S.cmdAt = Date.now();
+          R.toast(/fetch|network/i.test(String(e.message || e)) ? 'start helper/start-helper.cmd to hide your real icons' : 'the helper is busy: click the rug again in a moment');
+        });
     }
     function start(dir, fromP = 0) {
       anim = { dir, p: fromP, target: 1 };
@@ -158,10 +169,11 @@
     rug.userData.onDrag = dx => {
       if (anim) return;
       // from flat, a pull either way lifts it; once lifted, left lifts more and right lays it down
-      S.peel = R.clamp(p0 < 0.02 ? Math.abs(dx) / 0.32 : p0 + dx / 0.32, 0, 1);
+      const ddx = p0 < 0.02 ? Math.sign(dx) * Math.max(0, Math.abs(dx) - 0.012) : dx;   // ignore the wobble of a click
+      S.peel = R.clamp(p0 < 0.02 ? Math.abs(ddx) / 0.32 : p0 + ddx / 0.32, 0, 1);
     };
     rug.userData.onDragEnd = moved => {
-      if (!moved) return R.rugToggle();
+      if (!moved || (p0 < 0.02 && S.peel < 0.06)) { S.peel = p0; return R.rugToggle(); }
       if (S.peel < 0.06) S.peelTarget = 0;
       else if (S.hidden && !desk.length) refreshDesk();
     };
@@ -182,7 +194,7 @@
       if (j.count != null && j.count !== deskCount) { deskCount = j.count; if (!desk.length) layout(); }
       if (!desk.length || (desk.length !== j.count)) refreshDesk();
       // follow changes made outside the room — but not the echo of our own command
-      if (!anim && Date.now() - (S.cmdAt || 0) > 4000 && j.iconsVisible === S.hidden) start(j.iconsVisible ? 'show' : 'hide');
+      if (!anim && !S.cmdBusy && Date.now() - (S.cmdAt || 0) > 4000 && j.iconsVisible === S.hidden) start(j.iconsVisible ? 'show' : 'hide');
     });
     setInterval(refreshStash, 2500);
     refreshStash();
