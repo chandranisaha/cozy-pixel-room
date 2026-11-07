@@ -95,21 +95,23 @@
     const trimMat = R.mat(PAL.trim);
 
     // floor
-    const floor = R.box(12, 0.2, 9, R.texMat(planks()), 0, -0.1, 0, room);
+    const floorMat = R.texMat(planks());
+    const floor = R.box(12, 0.2, 9, floorMat, 0, -0.1, 0, room);
     floor.castShadow = false;
 
     // left wall
-    R.box(0.2, 6.5, 9, wallMat, -6.1, 3.25, 0, room);
+    const walls = [R.box(0.2, 6.5, 9, wallMat, -6.1, 3.25, 0, room)];
     R.box(0.08, 0.3, 9, trimMat, -5.96, 0.15, 0, room);
 
     // back wall with window hole: hole x∈[-3.6,-0.4], y∈[2.4,5.0]
     const W = { x0: -3.6, x1: -0.4, y0: 2.4, y1: 5.0 };
     R.windowRect = W;
     const bz = -4.6;
-    R.box(W.x0 + 6.2, 6.5, 0.2, wallMat, (-6.2 + W.x0) / 2, 3.25, bz, room);      // left of hole
-    R.box(6.2 - W.x1, 6.5, 0.2, wallMat, (W.x1 + 6.2) / 2, 3.25, bz, room);        // right of hole
-    R.box(W.x1 - W.x0, W.y0, 0.2, wallMat, (W.x0 + W.x1) / 2, W.y0 / 2, bz, room); // below
-    R.box(W.x1 - W.x0, 6.5 - W.y1, 0.2, wallMat, (W.x0 + W.x1) / 2, (W.y1 + 6.5) / 2, bz, room); // above
+    walls.push(
+      R.box(W.x0 + 6.2, 6.5, 0.2, wallMat, (-6.2 + W.x0) / 2, 3.25, bz, room),      // left of hole
+      R.box(6.2 - W.x1, 6.5, 0.2, wallMat, (W.x1 + 6.2) / 2, 3.25, bz, room),        // right of hole
+      R.box(W.x1 - W.x0, W.y0, 0.2, wallMat, (W.x0 + W.x1) / 2, W.y0 / 2, bz, room), // below
+      R.box(W.x1 - W.x0, 6.5 - W.y1, 0.2, wallMat, (W.x0 + W.x1) / 2, (W.y1 + 6.5) / 2, bz, room)); // above
     R.box(12, 0.3, 0.08, trimMat, 0, 0.15, -4.46, room);
 
     // window frame
@@ -174,18 +176,22 @@
     const bed = R.group(3.7, 0, -2.9, room);
     R.bedGroup = bed;
     R.box(3.9, 0.5, 3.2, R.mat(PAL.bedFrame), 0, 0.3, 0, bed);
-    R.box(3.8, 0.35, 3.1, R.mat(PAL.sheet), 0, 0.72, 0, bed);
+    const sheetMat = R.mat(PAL.sheet);
+    R.box(3.8, 0.35, 3.1, sheetMat, 0, 0.72, 0, bed);
     R.box(3.9, 1.8, 0.2, R.mat(PAL.bedFrame), 0, 0.9, -1.55, bed); // headboard
     R.box(1.3, 0.3, 0.7, R.mat(PAL.pillow), -0.9, 1.05, -1.05, bed);
     R.box(1.3, 0.3, 0.7, R.mat('#e9d9c6'), 0.75, 1.05, -1.05, bed);
-    R.box(3.85, 0.12, 2.0, R.texMat(blanketTex()), 0, 0.95, 0.5, bed);
-    R.box(3.85, 0.45, 0.1, R.texMat(blanketTex()), 0, 0.75, 1.52, bed);
+    const blanketMat = R.texMat(blanketTex());
+    const blanket = [R.box(3.85, 0.12, 2.0, blanketMat, 0, 0.95, 0.5, bed), R.box(3.85, 0.45, 0.1, blanketMat, 0, 0.75, 1.52, bed)];
+
+    // the things the room makeover (decor.js) repaints
+    R.decorParts = { wallMat, walls, floorMat, floor, sheetMat, blanketMat, blanket, curtainMat: cm };
 
     // ---------- vinyl cabinet (left wall) ----------
     const cab = R.group(-5.4, 0, -0.3, room);
     R.cabinet = cab;
     R.box(1.0, 1.3, 2.3, R.mat(PAL.woodLight), 0, 0.65, 0, cab);
-    R.box(0.04, 0.5, 2.0, R.mat(PAL.woodDark), 0.52, 0.85, 0, cab);
+    // the drawer on the front is built in tapes.js (the tape drawer)
     // record sleeves in the cabinet front
     const sleeves = ['#d4a24c', '#6aa0a8', '#c25b5b', '#7f6bb0', '#e3d4b0', '#5e8c5a'];
     sleeves.forEach((c, i) => R.box(0.5, 0.5, 0.05, R.mat(c), 0.2, 0.32, -0.9 + i * 0.32, cab));
@@ -200,19 +206,7 @@
     }
     R.box(0.3, 0.3, 0.3, R.mat('#c97c5d'), -5.7, 3.29, 0.6, room);
 
-    // poster on left wall
-    const poster = R.canvasTex(24, 32, (g, w, h) => {
-      g.fillStyle = '#f2d7a6'; g.fillRect(0, 0, w, h);
-      g.fillStyle = '#e57b5f'; g.fillRect(2, 2, w - 4, 18);
-      g.fillStyle = '#f7c86b'; g.fillRect(9, 6, 6, 6);
-      g.fillStyle = '#4b4876';
-      g.fillRect(2, 14, w - 4, 6);
-      g.fillRect(4, 12, 4, 2); g.fillRect(14, 11, 6, 3);
-      g.fillStyle = '#3a3560';
-      g.fillRect(4, 23, 16, 2); g.fillRect(6, 27, 12, 1);
-    });
-    const pm = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.0), R.texMat(poster));
-    pm.position.set(-5.99, 4.3, 1.9); pm.rotation.y = Math.PI / 2; room.add(pm);
+    // the poster on the left wall is built in poster.js (gig poster + week in review on its back)
 
     // rug is built in rug.js (it's interactive)
     R.rugTex = rugTex;
