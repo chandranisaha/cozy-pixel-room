@@ -1,8 +1,8 @@
-# 🌙 Cozy Pixel Room
+# 🌙 Pixel Room
 
 **your desktop, but it's a tiny lofi bedroom you actually live in.**
 
-![Cozy Pixel Room](preview.png)
+![Pixel Room](preview.png)
 
 ## why this exists
 I was tired of generic wallpapers. Same mountain, same gradient, same "aesthetic" photo everyone else has. My friends kept looking at my screen and going *"bro your desktop looks so boring."* Fair.
@@ -23,6 +23,11 @@ And as an avid fan of [Lofi Girl](https://www.youtube.com/@LofiGirl) (yes, the o
 - 🎧 **Spotify remote.** playing Spotify (the app, or open.spotify.com in your browser)? the record player becomes play/pause, and the crate shows what's on with ⏮ ⏯ ⏭. no login needed: it uses Windows' own media controls.
 - 🧹 **sweep your desktop icons under the rug.** literally. lift the rug to find them.
 - 🛏 **bed = wind-down mode.** lights dim, lamp off, brown noise, the cat sleeps, and a card shows tomorrow's first event.
+- 🎟 **a gig poster for whatever you're playing.** the real album cover, the artist in big letters, "live tonight". click it and it flips over on the wall to **your week**: focus minutes per day, tasks done, your best day starred, your streak.
+- 📼 **a tape drawer.** cute cassettes, each an ambience (rainy window, fireplace, café, keyboard clacks, birds, waves, crickets, brown noise): click to play, slide to mix. every finished focus session the cat also finds you a pixel sticker for the cabinet.
+- 🎨 **redecorate like it's 2004.** click an empty bit of wall for `room_makeover.exe`: patterns and colours for the wallpaper, floor, rug, bedsheet and curtains. ★ marks the original, one click puts it all back.
+- 👧 **dress-up tab.** name her, pick her hair (curly, bob, long, buns, ponytail, pixie), colours, outfit and headwear (headphones, cat ears, beanie, bow) with ◀ ▶ arrows. the cat too: tuxedo, tabby, calico, siamese… plus eyes and a collar.
+- ⏯ **a tiny player** in the corner box: play/pause next to the song, skip, volume.
 - 🖥🖥 **two monitors?** both stay in sync. do something on one screen and the other just quietly updates.
 
 ## get it running (5 minutes)
@@ -49,9 +54,9 @@ You need Windows 10/11 and [Lively Wallpaper](https://www.rocksdanister.com/live
    These links are private keys to your calendar, so never share or commit them.
 
 ## ✨ or let Claude do it: the `claude-skill` folder
-Don't feel like editing files? The [`claude-skill/cozy-room`](claude-skill/cozy-room/SKILL.md) folder is a skill for [Claude Code](https://claude.com/claude-code) that knows how this room is built. It covers setup, connecting Google Calendar and Outlook step by step, your photos and playlists, and adding brand new objects to the room.
+Don't feel like editing files? The [`claude-skill/pixel-room`](claude-skill/pixel-room/SKILL.md) folder is a skill for [Claude Code](https://claude.com/claude-code) that knows how this room is built. It covers setup, connecting Google Calendar and Outlook step by step, your photos and playlists, and adding brand new objects to the room.
 
-**Install it:** copy the `cozy-room` folder into `~/.claude/skills/` (all your projects) or into `.claude/skills/` inside this repo (just this one). Then open Claude Code here and say things like:
+**Install it:** copy the `pixel-room` folder into `~/.claude/skills/` (all your projects) or into `.claude/skills/` inside this repo (just this one). Then open Claude Code here and say things like:
 - *"set up my room and connect my Google Calendar and Outlook"*
 - *"put my dog on the bed instead of the cat"*
 - *"add a guitar in the corner that opens my practice playlist"*
@@ -60,7 +65,8 @@ Don't feel like editing files? The [`claude-skill/cozy-room`](claude-skill/cozy-
 ## the helper
 A wallpaper can't touch your desktop or start apps, so a small local helper does that:
 - **Run once:** double-click `helper/start-helper.cmd`
-- **Start automatically at login:** double-click `helper/install-startup.cmd`. To undo it, delete `Cozy Room Helper.lnk` from `shell:startup`.
+- **Start automatically at login:** double-click `helper/install-startup.cmd`. It adds a Task Scheduler task, "Pixel Room Helper", with a watchdog that restarts the helper if it ever stops. To undo it, double-click `helper/uninstall-startup.cmd`.
+- **Restart everything** (after an update, or if something's stuck): double-click `launch-room.cmd`. It restarts the helper and reloads the room in Lively.
 
 It listens only on `127.0.0.1:38917` and runs a fixed set of actions. Every request needs the token in `helper/token.js` (created on first run), so other web pages can't use it. It:
 - hides/shows desktop icons, and tucks single icons under the rug (moves them to `%USERPROFILE%\CozyRug` and back)
@@ -75,6 +81,11 @@ The port isn't 47823 because WSL's mirrored networking reserves that range.
 |---|---|
 | **Rug** | **click**: a wave sweeps all desktop icons under it (click again: they hop out). **drag**: the rug folds back as far as you pull and stays, showing the real icons lying underneath; click one to open it. **drop a desktop icon onto the rug**: that one file gets tucked under (a lump appears); lift the rug and drag it off to put it back on the desktop |
 | Record player | play / pause. Spins only while music plays, including Spotify or any other system audio |
+| **Player** (top of the corner box) | ▶ / ❚❚ next to the song plays or pauses whatever's on (Spotify or any app, else the room's lofi), ⏭ skips, the slider is the volume |
+| **Poster** (left wall) | a gig poster for what's playing (the cover is looked up on iTunes' public search). click: it flips over to **my week**; click again to flip back. the ticket stub at the bottom opens the artist in Spotify |
+| **Tape drawer** (front of the record cabinet) | **mixtapes**: 8 ambience cassettes, click to play, slide to mix, remembered. **sticker book**: one pixel sticker per finished focus session; click one to stick it on the cabinet (up to 6) |
+| **Walls** | click an empty bit: the **room makeover** window (wallpaper, floor, rug, bedsheet, curtains). while it's open, clicking those things in the room jumps to their tab. ★ = the original; **★ original room** resets everything |
+| **Corner box tabs** | ⏱ focus (timer + tasks) · ✿ dress up (name and restyle her and the cat; ★ original puts their look back) · 🎨 room (the makeover) |
 | **Record crate** (floor, by the cabinet) | pick music: lofi beats, late-night jazz, rain on the window, plus your Spotify playlists (`records` in `assets/manifest.js`) |
 | Lights | follow the music: the playing artist's genre (looked up on MusicBrainz) picks the colours (pop = red/blue, indie/folk = warm yellow, lofi = purple, electronic = neon…) and they pulse on the beat. Toggle in Customise |
 | **Sticky note board** | mirrors the Windows Sticky Notes app. Click a note to open it there; the "+" pad starts a new note |
@@ -103,8 +114,8 @@ It runs at most once a day automatically, is read-only, and doesn't send or publ
 Open `index.html` directly. URL parameters:
 - `?hour=21` fakes the time of day · `?weather=rain|snow|fog|thunder|cloud|clear` forces the weather · `?mood=angry|happy|idle|sleeping` forces the cat
 - `?debug` makes one minute last one second (timer, plant and cat moods move quickly)
-- `?debug&demo=focus` starts a focus session · `?demo=peel` lifts the rug · `?demo=crumple` throws two paper balls · `?demo=drawers` / `?demo=treat` open the drawers
-- `?debug&selftest` runs the end-to-end self-test (49 checks; results in `window.SELFTEST` and the console as `SELFTEST PASS/FAIL`). Links and apps are stubbed; the rug's hide/show runs for real and is put back.
+- `?debug&demo=focus` starts a focus session · `?demo=peel` lifts the rug · `?demo=crumple` throws two paper balls · `?demo=drawers` / `?demo=treat` open the drawers · `?demo=poster&week` flips the poster · `?demo=tapes` / `?demo=stickers` · `?demo=decor` · `?demo=dress&look=buns`
+- `?debug&selftest` runs the end-to-end self-test (62 checks; results in `window.SELFTEST` and the console as `SELFTEST PASS/FAIL`). Links and apps are stubbed; the rug's hide/show runs for real and is put back.
 
 ## two monitors
 Set Lively's wallpaper arrangement to **Duplicate** (Lively → the monitor icon). Each screen runs its own copy of the room in its own throwaway browser profile, so the room's state lives in the helper (`%LOCALAPPDATA%\CozyRoom\room-state.json`) instead of the browser. That also means it survives Lively restarts.
