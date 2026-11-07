@@ -1,7 +1,7 @@
 // Wall clock on the left wall, real local time.
 (function (R) {
   R.buildClock = function () {
-    const g = R.group(-5.97, 4.75, -2.5, R.room);
+    const g = R.group(-5.97, 4.55, -0.3, R.room);    // centred over the bookshelf, in the row with the poster and calendar
     g.rotation.y = Math.PI / 2;
 
     const face = R.canvasTex(32, 32, (c, w, h) => {

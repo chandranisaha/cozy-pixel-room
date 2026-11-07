@@ -13,7 +13,20 @@
     R.prod.last = Date.now();
     if (kind) R.prod[kind]++;
     R.store.set('prod', R.prod);
+    if (kind) {                                   // per-day history for the poster's week in review
+      const wk = R.store.get('week', {}), k = R.dayKey(), d = wk[k] || { focus: 0, mins: 0, tasks: 0 };
+      d[kind]++;
+      if (kind === 'focus') d.mins += +R.cfg.focusMin;
+      wk[k] = d;
+      Object.keys(wk).sort().slice(0, -35).forEach(o => delete wk[o]);
+      R.store.set('week', wk);
+    }
   };
+  R.dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  {   // first run with the history: start it from today's counts
+    const wk = R.store.get('week', null);
+    if (!wk) R.store.set('week', { [R.dayKey()]: { focus: R.prod.focus, mins: R.prod.focus * +R.cfg.focusMin, tasks: R.prod.tasks } });
+  }
 
   R.store.watch('prod', v => Object.assign(R.prod, v));
   R.store.watch('pomo', v => {
