@@ -35,9 +35,59 @@
     }
     R.emit('media', M.media);
   }
-  M.pollMedia = () => R.helper.ok ? R.helper.call('/media', 6000).then(gotMedia).catch(() => {}) : Promise.resolve();
+  M.pollMedia = () => R.helper.call('/media', 6000).then(gotMedia).catch(() => {});
   M.mediaCmd = what => R.helper.call('/media/' + what, 8000).then(j => { gotMedia(j); return j; });
   setInterval(M.pollMedia, 4000);
+  // a Spotify record: the helper opens it in the app and presses its Play button (replacing
+  // whatever was playing there). Anything else that's a link just opens.
+  const spotifyUri = url => {
+    const m = /^spotify:(playlist|album|artist):([A-Za-z0-9]{22})$/.exec(url) || /open\.spotify\.com\/(playlist|album|artist)\/([A-Za-z0-9]{22})/.exec(url);
+    return m ? 'spotify:' + m[1] + ':' + m[2] : null;
+  };
+  // The amp's click-to-mute turns Spotify itself down to 0 in the Windows mixer, and that sticks
+  // after the room reloads, so a record picked later played silently. Picking a record un-mutes it.
+  const unmuteSpotify = () => R.helper.call(R.helper.q('/volume', { app: 'spotify' }), 3000)
+    .then(j => {
+      if (!(j && j.volume < 0.05)) return;
+      return R.helper.call(R.helper.q('/volume', { app: 'spotify', v: '0.600' }), 3000)
+        .then(() => { R.emit('spotify:unmuted', 0.6); R.toast('Spotify was muted · turned it back up to 60%'); });
+    })
+    .catch(() => {});
+  // One record at a time: a second pick while Spotify is still starting the first waits for it,
+  // and only the latest pick is played after that.
+  let starting = null, queued = null;
+  M.playLink = r => {
+    const uri = spotifyUri(r.url);
+    if (!uri) { R.openLink(r.url); return Promise.resolve(); }
+    if (starting) { queued = r; R.toast('next up: ' + r.title); return starting.then(() => {}, () => {}); }
+    R.toast('starting ' + r.title + ' on Spotify…');
+    const attempt = () => R.helper.call(R.helper.q('/media/play', { uri, name: r.title }), 40000);
+    starting = attempt()
+      .catch(e => /busy|fetch|network/i.test(String(e.message || e)) ? new Promise(ok => setTimeout(ok, 1500)).then(attempt) : Promise.reject(e))
+      .then(gotMedia)
+      .then(unmuteSpotify)
+      .catch(e => { R.toast(String(e.message || e)); throw e; })
+      .finally(() => {
+        starting = null;
+        if (queued) { const n = queued; queued = null; M.playLink(n); }
+      });
+    return starting;
+  };
+  // play/pause for whatever is playing: Spotify (or any app) through Windows, else the room's own music
+  M.playPause = () => {
+    if (M.media.active) {
+      M.media.playing = !M.media.playing; R.emit('media', M.media);      // feels instant; the poll confirms
+      return M.mediaCmd('toggle').catch(e => R.toast(String(e.message || e)));
+    }
+    if (M.playing) return M.stop();
+    if (M.links.length && M.lastRecord && M.lastRecord.startsWith('link')) { const r = M.links.find(x => x.id === M.lastRecord); if (r) return M.playLink(r); }
+    M.play(R.store.get('station', 'lofi'));
+  };
+  M.next = () => M.media.active ? M.mediaCmd('next').catch(e => R.toast(String(e.message || e))) : null;
+  M.pauseSpotify = () => {
+    if (M.media.active && M.media.playing && /spotify/i.test(M.media.app || '')) M.mediaCmd('toggle').catch(() => {});
+  };
+  M.swap = (r, done) => done();   // replaced by the turntable's record-change animation
   M.spinning = () => M.playing || M.systemAudio() || !!(M.media.active && M.media.playing);
 
   // ---------- stations ----------
@@ -205,14 +255,57 @@
     R.box(0.9, 0.02, 1.1, R.mat('#2a1f22'), 0, 0.17, 0, tt);
 
     const labels = {};
-    const labelFor = s => (labels[s.id] = labels[s.id] || labelTex(s.color, s.label));
+    const labelFor = s => {
+      if (labels[s.id]) return labels[s.id];
+      const tex = labels[s.id] = labelTex(s.color, s.label);
+      const src = s.cover && R.asset(s.cover);
+      if (src && String(src).startsWith('data:')) {     // WebGL under file:// only takes embedded images
+        const im = new Image();
+        im.onload = () => {
+          const g = tex.userData.ctx;
+          g.save(); g.beginPath(); g.arc(16, 16, 8, 0, Math.PI * 2); g.clip();
+          g.imageSmoothingEnabled = true; g.drawImage(im, 8, 8, 16, 16); g.restore();
+          g.fillStyle = '#141018'; g.fillRect(15, 15, 2, 2);
+          tex.needsUpdate = true;
+        };
+        im.src = src;
+      }
+      return tex;
+    };
     const topMat = R.texMat(labelFor(M.stations.find(s => s.id === 'lofi')));
     const rec = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 28), [R.mat('#141018'), topMat, R.mat('#141018')]);
     rec.position.set(0, 0.2, 0.08);
     rec.castShadow = true;
     tt.add(rec);
-    R.on('music', on => { if (on && M.station) { topMat.map = labelFor(M.station); topMat.needsUpdate = true; } });
-    R.on('record:link', r => { topMat.map = labelFor(r); topMat.needsUpdate = true; });
+    let current = M.stations.find(s => s.id === 'lofi');
+    const setLabel = r => { current = r; topMat.map = labelFor(r); topMat.needsUpdate = true; };
+    R.on('music', on => { if (on && M.station && !swap) setLabel(M.station); });
+    R.on('record:link', r => { if (!swap) setLabel(r); });
+
+    // changing records: arm lifts, the old record flies back to the crate, the new one comes
+    // out of it and drops onto the platter, the arm goes down, then it plays
+    let swap = null;
+    M.swap = (r, done) => {
+      if (swap) { swap.done = done; swap.r = r; return; }
+      if (current && current.id === r.id && M.spinning()) return done();
+      swap = { t: 0, r, done, swapped: false };
+      R.sfx.swish && R.sfx.swish();
+    };
+    const ease = x => x * x * (3 - 2 * x), c01 = x => Math.max(0, Math.min(1, x));
+    function swapTick(dt) {
+      swap.t += dt;
+      const T = swap.t;
+      const k = T < 1.15 ? ease(c01((T - 0.45) / 0.7)) : 1 - ease(c01((T - 1.15) / 0.7));
+      if (T >= 1.15 && !swap.swapped) { swap.swapped = true; setLabel(swap.r); }
+      rec.position.set(0.15 * k, 0.2 + Math.sin(k * Math.PI) * 0.7 - 0.9 * k, 0.08 + 1.75 * k);
+      rec.rotation.x = 1.3 * k;
+      rec.scale.setScalar(1 - 0.25 * k);
+      if (T >= 1.85 && !swap.landed) { swap.landed = true; R.sfx.thump && R.sfx.thump(); }
+      if (T >= 2.15) {
+        rec.position.set(0, 0.2, 0.08); rec.rotation.x = 0; rec.scale.setScalar(1);
+        const d = swap.done; swap = null; d();
+      }
+    }
 
     // tonearm pivots from the back corner
     const armPivot = R.group(0.3, 0.22, -0.42, tt);
@@ -225,6 +318,38 @@
 
     const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), R.glow('#552222'));
     led.position.set(0.4, 0.12, 0.55); tt.add(led);
+
+    // ---------- volume (the slider in the corner box) ----------
+    // Turns the room's own music, or Spotify / the browser when that's what is playing.
+    const V = { app: null, appVal: {}, sendT: 0 };
+    const target = () => {
+      if (M.playing || !M.media.active) return null;
+      const a = String(M.media.app || '').toLowerCase();
+      return /spotify/.test(a) ? 'spotify' : (a.split(/[\\!._\s]/).filter(Boolean).pop() || '').replace(/[^a-z0-9]/g, '') || null;
+    };
+    const shown = () => (V.app ? (V.appVal[V.app] ?? 1) : R.cfg.musicVolume / 100);
+    const sendApp = (app, v, now) => {
+      clearTimeout(V.sendT);
+      const go = () => R.helper.call(R.helper.q('/volume', { app, v: v.toFixed(3) }), 3000).catch(e => R.toast(String(e.message || e)));
+      if (now) go(); else V.sendT = setTimeout(go, 90);
+    };
+    function setVol(v, now) {
+      v = R.clamp(v, 0, 1);
+      if (V.app) { V.appVal[V.app] = v; sendApp(V.app, v, now); R.emit('volume', v); return; }
+      R.cfg.musicVolume = Math.round(v * 100);
+      R.store.set('cfg', R.cfg);
+      R.emit('cfg', { name: 'musicVolume', val: R.cfg.musicVolume });
+      R.emit('volume', v);
+    }
+    const grab = () => {
+      V.app = target();
+      if (V.app && !(V.app in V.appVal)) R.helper.call(R.helper.q('/volume', { app: V.app }), 3000).then(j => { V.appVal[V.app] = j.volume; R.emit('volume', j.volume); }).catch(() => {});
+      R.emit('volume', shown());
+    };
+    R.on('media', grab);
+    R.on('music', grab);
+    R.on('spotify:unmuted', v => { V.appVal.spotify = v; R.emit('volume', shown()); });
+    M.volume = { get: shown, set: setVol, app: () => V.app };
 
     // floating music notes
     const noteTex = R.canvasTex(8, 8, (g) => {
@@ -242,7 +367,8 @@
 
     let speed = 0, nt = 0;
     R.tick(dt => {
-      const on = M.spinning();
+      if (swap) swapTick(dt);
+      const on = !swap && M.spinning();
       speed = R.damp(speed, on ? 3.5 : 0, 2.5, dt);   // spin up / wind down
       rec.rotation.y -= speed * dt;
       armPivot.rotation.y = R.damp(armPivot.rotation.y, on ? PLAY : REST, 3, dt);
@@ -256,8 +382,9 @@
       });
     });
     R.makeClickable(tt, 'record player', () => {
-      // Spotify is on (or paused) and the room's own music isn't: the turntable is its remote
-      if (!M.playing && M.media.active) {
+      // Spotify is on (or paused) and the room's own music isn't: the turntable is its remote.
+      // Only Spotify: a paused YouTube tab in the browser used to swallow the click, so lofi never started.
+      if (!M.playing && M.media.active && /spotify/i.test(M.media.app || '')) {
         M.mediaCmd('toggle').then(j => R.toast((j.playing ? '♪ ' : '❚❚ ') + (j.title || 'Spotify'))).catch(e => R.toast(String(e.message || e)));
         return;
       }
