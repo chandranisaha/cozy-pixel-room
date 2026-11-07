@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+  <link rel="icon" href="assets/cat-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cozy Pixel Room</title>
+<title>Pixel Room</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Gaegu:wght@700&display=swap" rel="stylesheet">
 <style>
   :root {
     --ink: #fff3d6; --dim: #c9bfe0; --panel: rgba(28, 24, 52, 0.82); --edge: #6a5fa8;
@@ -28,8 +29,16 @@
   #hud .top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
   #hudToggle { padding: 0 8px; }
   #wx { color: var(--dim); font-size: 18px; }
-  #np { color: var(--accent); font-size: 18px; min-height: 18px; }
-  .pomo { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 4px; }
+  #player { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  #player button { padding: 0; width: 26px; height: 24px; font-size: 15px; flex: none; }
+  #np { color: var(--accent); font-size: 18px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np.idle { color: var(--dim); }
+  #npVol { width: 58px; flex: none; accent-color: var(--accent); margin: 0; }
+  #hud.collapsed #player { display: flex; }
+  #hud.collapsed #npVol, #hud.collapsed #npNext { display: none; }
+  #hud.collapsed #np { max-width: 180px; }
+  .pomo { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 8px 0 4px; }
+  #hud .row button { flex: 1; padding: 4px 0; }
   #pomoTime { font-size: 48px; line-height: 1; letter-spacing: 1px; }
   #pomoMode { color: var(--dim); text-transform: uppercase; font-size: 18px; }
   #hud.focusing #pomoTime { color: var(--accent); }
@@ -98,6 +107,49 @@
   .sleeve.on { border-color: var(--accent); background: #4a408a; }
   .sleeve small { color: var(--dim); font-size: 15px; }
   .sleeve-art { width: 72px; height: 72px; image-rendering: pixelated; box-shadow: 3px 3px 0 rgba(0,0,0,0.35); }
+
+  /* corner box tabs + dress up */
+  #hud .htabs { display: flex; gap: 4px; margin: 8px 0 2px; }
+  #hud .htabs button { flex: 1; font-size: 17px; padding: 2px 0; background: #2a2452; }
+  #hud .htabs button.on { background: #4a408a; border-color: var(--accent); color: var(--accent); }
+  #paneDress { margin-top: 6px; }
+  #paneDress .dwho { display: flex; gap: 6px; margin-bottom: 6px; }
+  #paneDress .dwho button { flex: 1; font-size: 18px; }
+  #paneDress .dwho button.on { background: #f7c86b; color: #2b2140; }
+  #paneDress .drow { display: flex; align-items: center; gap: 5px; margin: 3px 0; font-size: 18px; }
+  #paneDress .dkey { flex: 0 0 104px; color: var(--dim); }
+  #paneDress .drow button { padding: 0 6px; font-size: 15px; height: 22px; }
+  #paneDress .dval { flex: 1; text-align: center; background: #241f45; border: 2px solid var(--edge); padding: 0 4px; white-space: nowrap; overflow: hidden; }
+  #paneDress .dswatch { display: inline-block; width: 14px; height: 12px; border: 1px solid #fff3d6; vertical-align: -1px; }
+  #paneDress .dname { flex: 1; min-width: 0; font: inherit; font-size: 19px; color: var(--accent); background: #241f45; border: 2px solid var(--edge); padding: 0 6px; }
+  #paneDress .dfoot2 { margin-top: 8px; }
+  #paneDress .dhint { color: var(--dim); font-size: 15px; text-align: center; margin-top: 3px; }
+  #paneDress .dfoot2 button { flex: 1; font-size: 17px; }
+
+  /* room makeover: an old-school decorating window */
+  #decor { position: fixed; left: 24px; bottom: 64px; width: 360px; z-index: 8; font-size: 18px; color: #2b2140; background: #e9e1f5;
+    border: 2px solid; border-color: #ffffff #6a5fa8 #6a5fa8 #ffffff; box-shadow: 0 0 0 2px #2b2140, 6px 6px 0 2px rgba(0,0,0,0.35); user-select: none; }
+  #decor .dbar { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 2px 8px; color: #fff; cursor: move;
+    background: linear-gradient(90deg, #6a5fa8, #b48ad6 60%, #f6b6c4); text-shadow: 1px 1px 0 #2b2140; font-size: 19px; }
+  #decor button { color: #2b2140; background: #f4eefc; border: 2px solid; border-color: #ffffff #8a7fc0 #8a7fc0 #ffffff; font-size: 17px; padding: 1px 8px; }
+  #decor button:hover { background: #fff8d6; }
+  #decor button:active, #decor button.on { border-color: #8a7fc0 #ffffff #ffffff #8a7fc0; background: #fff3c4; }
+  #decor .dbtns button { padding: 0 6px; font-size: 15px; margin-left: 3px; }
+  #decor .dtabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px 6px 0; }
+  #decor .dtabs button { font-size: 16px; padding: 1px 6px; }
+  #decor .dbody { margin: 6px; padding: 6px 8px 8px; background: #fbf8ff; border: 2px solid; border-color: #8a7fc0 #ffffff #ffffff #8a7fc0; }
+  #decor .dlab { color: #6a5fa8; font-size: 16px; margin: 2px 0 3px; }
+  #decor .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 5px; }
+  #decor .dsw { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; font-size: 14px; }
+  #decor .dsw canvas { image-rendering: pixelated; border: 1px solid #2b2140; }
+  #decor .dcols { display: flex; flex-wrap: wrap; gap: 5px; }
+  #decor .dchip { width: 30px; height: 26px; padding: 0; }
+  #decor .dchip.on { outline: 2px dashed #2b2140; outline-offset: 1px; }
+  #decor .dchip.orig::after { content: '★'; color: #fff8d6; font-size: 13px; text-shadow: 1px 1px 0 #2b2140; }
+  #decor .dfoot button { padding: 1px 4px; }
+  #decor .dfoot { display: flex; gap: 5px; padding: 0 6px 4px; }
+  #decor .dfoot button { flex: 1; font-size: 16px; }
+  #decor .dstatus { font-size: 14px; color: #6a5fa8; padding: 2px 8px 4px; border-top: 1px solid #c9bfe0; }
 </style>
 </head>
 <body>
@@ -107,9 +159,14 @@
   <div class="top">
     <div>
       <div id="wx">…</div>
-      <div id="np"></div>
     </div>
     <button id="hudToggle" title="show / hide">≡</button>
+  </div>
+  <div id="player">
+    <button id="npPlay" title="play / pause">▶</button>
+    <div id="np">nothing playing</div>
+    <button id="npNext" title="next song">⏭</button>
+    <input id="npVol" type="range" min="0" max="100" title="volume">
   </div>
   <div class="body">
     <div class="pomo"><span id="pomoTime">25:00</span><span id="pomoMode">ready</span></div>
@@ -156,7 +213,7 @@
 <script>
   // the room is built only after the shared state has arrived from the helper (js/sync.js)
   R.sync.hydrate().then(() => {
-    ['audio', 'scene', 'weather', 'clock', 'music', 'crate', 'vibe', 'windowfx', 'rug', 'photos', 'wall', 'stickies', 'books', 'calendar', 'pomodoro', 'tasks', 'bin', 'drawers', 'plant', 'cat', 'messages', 'bed', 'girl', 'main'].forEach(n => {
+    ['audio', 'scene', 'weather', 'clock', 'music', 'crate', 'vibe', 'windowfx', 'rug', 'photos', 'wall', 'stickies', 'books', 'calendar', 'pomodoro', 'tasks', 'bin', 'drawers', 'poster', 'tapes', 'decor', 'plant', 'cat', 'messages', 'bed', 'girl', 'looks', 'main'].forEach(n => {
       const el = document.createElement('script'); el.src = 'js/' + n + '.js'; el.async = false; document.body.appendChild(el);
     });
   });

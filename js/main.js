@@ -33,6 +33,10 @@
   R.buildBed();
   R.buildBin();
   R.buildDrawers();
+  R.buildPoster();
+  R.buildTapes();
+  R.buildDecor();
+  R.buildLooks();
   R.buildMessages();
   R.buildVibe();
   R.initTasks();
@@ -41,6 +45,12 @@
   if (R.params.get('demo') === 'peel') setTimeout(() => R.rugPeel(0.7), 2500);
   if (R.params.get('demo') === 'rug') { R.helper.call = () => Promise.reject(); R.helper.ok = false; R.rugToggle(); }
   if (/^(drawers|treat)$/.test(R.params.get('demo'))) R.clickable.filter(o => /drawer/.test(o.userData.label) && (R.params.get('demo') === 'drawers' || /treat/.test(o.userData.label))).forEach(o => o.userData.onClick());
+  if (R.params.get('demo') === 'tapes') setTimeout(() => { R.lastClick = { x: 300, y: 600 }; R.tapes.setMix('rain', 0.6); R.tapes.setMix('fire', 0.4); R.tapes.show(); }, 1500);
+  if (R.params.get('demo') === 'stickers') setTimeout(() => { for (let i = 1; i <= 7; i++) R.tapes.award(1000 + i); const b = R.store.get('stickers'); b.stuck = Object.keys(b.got).slice(0, 4); R.store.set('stickers', b); R.store.fire('stickers'); R.lastClick = { x: 300, y: 600 }; }, 1500);
+  if (R.params.get('demo') === 'decor') setTimeout(() => { R.decor.set('wall', { p: 'hearts', c: 4 }); R.decor.set('rug', { p: 'round', c: 1 }); R.decor.set('bed', { p: 'gingham', c: 3 }); R.decor.set('curtain', { p: 'dots', c: 2 }); R.decor.set('floor', { p: 'parquet', c: 1 }); R.decor.open('bed'); }, 1500);
+  if (R.params.get('demo') === 'dress') setTimeout(() => { if (R.params.has('look')) { R.store.set('look', { girl: { name: 'Juno', hair: R.params.get('look') || 'buns', hairCol: 4, top: 'sweater', topCol: 2, bottom: 'skirt', bottomCol: 4, head: 'cat ears', headCol: 1 }, cat: { name: 'Biscuit', coat: 'orange tabby', eyes: 2, collar: 'bell', collarCol: 0 } }); R.store.fire('look'); } R.looks.show('dress'); }, 1500);
+  if (R.params.get('demo') === 'poster') setTimeout(() => { R.music.media = { active: true, title: 'Balam Pichkari', artist: 'Pritam', app: 'Spotify.exe' }; R.emit('media', R.music.media); if (R.params.has('week')) { const wk = {}; [3, 2, 0, 4, 1, 5, 2].forEach((f, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); wk[R.dayKey(d)] = { focus: f, mins: f * 25, tasks: (i * 2) % 5 }; }); R.store.set('week', wk); R.store.fire('week'); R.poster.flip('week'); } }, 1500);
+  if (R.params.get('demo') === 'mag') setTimeout(() => { R.openCatalogue(); R.catalogue.goTo(+R.params.get('spread') || 0); if (R.params.has('hold')) setTimeout(() => R.catalogue.hold(+R.params.get('hold')), 1500); }, 1500);
   if (R.params.get('demo') === 'crumple') { R.emit('task:done', { text: 'demo task' }); setTimeout(() => R.emit('task:done', { text: 'demo task' }), 3000); }
 
   // ---------- ambience: fairy twinkle, dust in the window light, mug steam ----------
@@ -120,6 +130,13 @@
     floorPlane.constant = -h;
     return ray.ray.intersectPlane(floorPlane, new THREE.Vector3());
   };
+  // screen point → point on any plane (for dragging things on the walls), or null
+  R.screenToPlane = (cx, cy, plane) => {
+    const r = canvas.getBoundingClientRect();
+    ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    return ray.ray.intersectPlane(plane, new THREE.Vector3());
+  };
   function onUi(ev) { return ev.target !== canvas; }
   let lastMX = null, lastMY = null;
   window.addEventListener('mousemove', ev => {
@@ -145,8 +162,19 @@
   });
   // draggable objects (the rug) get down/move/up; everything else gets a click
   let drag = null;
+  // the room makeover is open: a click on the rug / bed / walls / floor / curtains picks that tab
+  let decorClick = false;
+  function decorHit(ev) {
+    if (!R.decor || !R.decor.isOpen || !R.decorPick) return false;
+    const r = canvas.getBoundingClientRect();
+    ndc.set((ev.clientX - r.left) / r.width * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    return R.decorPick(ray.intersectObjects(R.room.children, true).filter(h => h.object.visible));
+  }
   canvas.addEventListener('mousedown', ev => {
     if (ev.button !== 0) return;
+    decorClick = decorHit(ev);
+    if (decorClick) return;
     const o = pick(ev);
     if (o && o.userData.onDragStart) {
       drag = { obj: o, x: ev.clientX, y: ev.clientY, moved: false };
@@ -163,7 +191,7 @@
   let suppressClick = false;
   canvas.addEventListener('mousedown', ev => { R.lastClick = { x: ev.clientX, y: ev.clientY }; }, true);
   canvas.addEventListener('click', ev => {
-    if (suppressClick) return;
+    if (suppressClick || decorClick) { decorClick = false; return; }
     const o = pick(ev);
     if (o && !o.userData.onDragStart) o.userData.onClick();
   });
@@ -191,11 +219,30 @@
     document.getElementById('stats').textContent = 'today: ' + R.prod.focus + ' focus · ' + R.prod.tasks + ' tasks · cat is ' + R.cat.mood;
     const W = R.weather;
     document.getElementById('wx').textContent = (W.temp ? W.temp + ' · ' : '') + W.desc + (W.city ? ' · ' + W.city : '');
-    const np = document.getElementById('np');
-    const vibe = R.vibe && R.vibe.name ? ' · ' + R.vibe.name : '';
-    np.textContent = R.music.nowPlaying ? '♪ ' + R.music.nowPlaying + vibe : (R.music.playing ? '♪ ' + R.music.station.title : '');
+    drawPlayer();
     hud.classList.toggle('focusing', P.mode === 'focus');
   }
+  // the little player: play/pause next to the song, skip, volume
+  const np = document.getElementById('np'), npPlay = document.getElementById('npPlay'), npNext = document.getElementById('npNext'), npVol = document.getElementById('npVol');
+  function drawPlayer() {
+    const M = R.music, media = M.media || {};
+    const vibe = R.vibe && R.vibe.name ? ' · ' + R.vibe.name : '';
+    const text = M.nowPlaying ? M.nowPlaying + vibe : (M.playing ? M.station.title : '');
+    np.textContent = text ? '♪ ' + text : 'nothing playing';
+    np.title = text;
+    np.classList.toggle('idle', !text);
+    const on = M.playing || !!(media.active && media.playing);
+    npPlay.textContent = on ? '❚❚' : '▶';
+    npPlay.title = on ? 'pause' : 'play';
+    npNext.disabled = !media.active;
+    if (document.activeElement !== npVol) npVol.value = Math.round(M.volume.get() * 100);
+    npVol.title = 'volume' + (M.volume.app() ? ' (' + M.volume.app() + ')' : '') + ' · ' + npVol.value + '%';
+  }
+  npPlay.onclick = () => { R.music.playPause(); setTimeout(drawPlayer, 50); };
+  npNext.onclick = () => R.music.next();
+  npVol.oninput = () => R.music.volume.set(npVol.value / 100);
+  npVol.onchange = () => { R.music.volume.set(npVol.value / 100, true); R.toast('volume ' + npVol.value + '%'); };
+  ['media', 'music', 'track', 'volume'].forEach(e => R.on(e, () => drawPlayer()));
   R.on('pomo:tick', hudTick);
   hudTick();
 
@@ -208,19 +255,26 @@
   // isn't enough. A second keydown for a key that is still held (or that was let go a moment
   // ago) is a copy, unless the key has been held long enough to auto-repeat. And every typed
   // character has to follow its own keydown: text arriving without one is a copy too.
-  const keys = {};          // code -> { down, at, upAt }
+  // Lively sets the extended-key bit on every key it forwards, so its copy has a different
+  // ev.code ("KeyS" vs "" or a media key) from the real one. Keys are therefore tracked by
+  // keyCode (the same for both), and a keydown whose code differs from the last accepted one
+  // for that key is the other source's copy of it, however late it arrives.
+  const keys = {};          // keyCode -> { down, at, upAt, last, code, owed }
   let grant = 0;            // characters the last real keydown may type
   const drop = ev => { ev.preventDefault(); ev.stopImmediatePropagation(); };
+  const keyId = ev => ev.keyCode || (ev.key.length === 1 ? ev.key.toUpperCase() : ev.key);
   window.addEventListener('keydown', ev => {
-    const k = keys[ev.code || ev.key] = keys[ev.code || ev.key] || { down: false, at: -1e9, upAt: -1e9 };
+    const id = keyId(ev);
+    const k = keys[id] = keys[id] || { down: false, at: -1e9, upAt: -1e9, last: -1e9, code: '', owed: false };
     const now = ev.timeStamp;
+    if (k.owed && ev.code !== k.code && now - k.last < 600) { k.owed = false; return drop(ev); }
     const held = k.down && now - k.at < 300 && !ev.repeat;
     if (held || now - k.at < 45 || now - k.upAt < 30) return drop(ev);
     if (!k.down) k.at = now;
-    k.down = true;
+    k.down = true; k.last = now; k.code = ev.code; k.owed = true;
     grant = ev.key.length === 1 || ev.key === 'Enter' ? 1 : 0;
   }, true);
-  window.addEventListener('keyup', ev => { const k = keys[ev.code || ev.key]; if (k) { k.down = false; k.upAt = ev.timeStamp; } }, true);
+  window.addEventListener('keyup', ev => { const k = keys[keyId(ev)]; if (k) { k.down = false; k.upAt = ev.timeStamp; } }, true);
   window.addEventListener('blur', () => Object.values(keys).forEach(k => (k.down = false)));
   window.addEventListener('beforeinput', ev => {
     if (ev.inputType !== 'insertText' && ev.inputType !== 'insertLineBreak') return;

@@ -14,7 +14,7 @@
   };
   const wait = ms => new Promise(r => setTimeout(r, ms));
   let simT = 1000;
-  const step = sec => { for (let i = 0; i < sec * 30; i++) { simT += 1 / 30; R.mouseTravel = 0; for (const fn of R.updaters) fn(1 / 30, simT); } };
+  const step = sec => { for (let i = 0; i < sec * 30; i++) { simT += 1 / 30; R.mouseTravel = 0; for (const fn of R.updaters) fn(1 / 30, simT); } R.scene.updateMatrixWorld(); };
   const canvas = document.getElementById('room');
   const panel = document.getElementById('panel');
 
@@ -81,9 +81,16 @@
   log(!R.music.playing && !R.music.spinning(), 'vinyl stops when paused');
 
   click(find('record crate'));
-  log(panelText().includes('late-night jazz'), 'crate opens with records', panel.querySelectorAll('.sleeve').length + ' records');
-  [...panel.querySelectorAll('.sleeve')].find(b => b.textContent.includes('jazz')).click();
-  step(3);
+  const mag = document.getElementById('mag');
+  log(mag && !mag.hidden && mag.textContent.includes('late-night jazz'), 'crate opens the catalogue', mag ? mag.querySelectorAll('.art').length + ' records, ' + mag.querySelectorAll('.hold .pg').length + ' pages' : 'no catalogue');
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 })); await wait(900);
+  log(R.catalogue.page() === 1 && R.catalogue.target(0) === 180 && !!mag.querySelector('.flapw'), 'a page turns to the next spread');
+  await wait(120);
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 })); await wait(900);
+  log(R.catalogue.page() === 0 && R.catalogue.target(0) === 0, 'and back again');
+  mag.querySelector('.art[data-rec="jazz"]').click();
+  step(3); await wait(500);
+  log(mag.hidden, 'dropping the needle closes the catalogue');
   log(R.music.playing && R.music.station.id === 'jazz' && R.vibe.name === 'jazz', 'jazz record plays, lights go amber', 'vibe=' + R.vibe.name);
   R.music.play('rain'); step(2);
   log(R.vibe.name === 'rain', 'rain record → blue lights');
@@ -153,12 +160,13 @@
   const [txt, when] = panel.querySelectorAll('.remform input');
   txt.value = 'selftest reminder'; when.value = 'in 5m';
   panel.querySelector('.remform').dispatchEvent(new Event('submit', { cancelable: true }));
-  const rem = R.reminders.list().find(r => r.text === 'selftest reminder');
+  const rem = R.reminders.list().filter(r => r.text === 'selftest reminder').pop();
   log(!!rem && Math.abs(rem.at - Date.now() - 300000) < 5000, 'reminder added for in 5 min');
   rem.at = Date.now() - 1000; R.reminders.check();
   log(rem.fired && R.reminders.unread() > 0, 'due reminder → cat alert + unread letter');
   R.closePanel();
-  R.reminders.list().splice(R.reminders.list().indexOf(rem), 1);
+  R.store.set('reminders', R.reminders.list().filter(r => r.text !== 'selftest reminder'));
+  R.store.fire('reminders');
 
   // ---------- Spotify through Windows' media controls ----------
   const mediaCalls = [], mc = R.helper.call;
@@ -167,8 +175,20 @@
   click(find('record player')); await wait(50);
   log(mediaCalls.includes('/media/toggle') && !R.music.playing, 'record player is a Spotify remote when Spotify is open', mediaCalls.join(','));
   click(find('record crate')); await wait(50);
-  log(panelText().includes('test song') && !!panel.querySelector('.nowplaying button'), 'crate shows Spotify now playing + controls');
-  R.closePanel(); R.helper.call = mc; R.music.media = { active: false };
+  { const mg = document.getElementById('mag'); log(mg.querySelector('.bar').textContent.includes('test song') && mg.querySelectorAll('.bar button').length >= 5, 'catalogue shows Spotify now playing + controls'); mg.querySelector('.bar button[title=close]').click(); }
+  R.closePanel();
+  // Spotify open but logged out: the crate says so and offers to bring it up
+  mediaCalls.length = 0;
+  R.helper.call = p => /^\/media/.test(p) ? (mediaCalls.push(p), Promise.resolve(/spotify$/.test(p) ? { opened: 'app' } : { active: false, spotify: 'signedout' })) : mc(p);
+  R.music.media = { active: false, spotify: 'signedout' };
+  const ok0 = R.helper.ok; R.helper.ok = true;   // as if the helper is running
+  click(find('record crate')); await wait(50);
+  const mbar = document.getElementById('mag').querySelector('.bar');
+  const spBtn = [...mbar.querySelectorAll('button')].find(b => b.textContent.includes('Spotify'));
+  log(mbar.textContent.includes('not logged in') && !!spBtn, 'catalogue explains why Spotify isn\'t connected', mbar.textContent);
+  if (spBtn) spBtn.click(); await wait(50);
+  log(mediaCalls.includes('/media/spotify'), 'catalogue button opens the Spotify app', mediaCalls.join(','));
+  mbar.querySelector('button[title=close]').click(); R.helper.call = mc; R.music.media = { active: false }; R.helper.ok = ok0;
 
   // ---------- calendar ----------
   const d = new Date(), ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
@@ -193,8 +213,21 @@
   R.helper.call = calCall;
   window.livelyPropertyListener('calendarIcs', saved[0]); window.livelyPropertyListener('outlookIcs', saved[1]);
   click(find('calendar'));
-  log(R.cfg.calendarIcs ? panelText().includes('today') : panelText().includes('iCal'), 'calendar opens (agenda, or setup steps when no link yet)');
+  log(R.calendar.feeds().length ? panelText().includes('today') : panelText().includes('iCal'), 'calendar opens (agenda, or setup steps when no link yet)');
   R.closePanel();
+  // connecting from the room: copy a link, click "paste link"
+  const savedLinks = R.store.get('calLinks', {}), cfgG = R.cfg.calendarIcs;
+  R.cfg.calendarIcs = '';
+  R.store.set('calLinks', {});
+  R.helper.call = p => /^\/calendar\/clip/.test(p) ? Promise.resolve({ url: 'https://calendar.google.com/calendar/ical/me/private-x/basic.ics', events: 3 })
+    : /^\/calendar/.test(p) ? Promise.resolve(ics('pasted event')) : calCall(p);
+  click(find('calendar')); await wait(50);
+  const pasteBtn = button('paste link');
+  if (pasteBtn) pasteBtn.click(); await wait(80);
+  log(R.calendar.link('calendarIcs').includes('private-x') && panelText().includes('connected'), 'calendar connects from the room (paste link)', panelText().slice(0, 120));
+  log(R.calendar.eventsOn(d).some(e => e.title === 'pasted event'), 'pasted calendar\'s events load');
+  R.closePanel();
+  R.helper.call = calCall; R.store.set('calLinks', savedLinks); R.cfg.calendarIcs = cfgG;
 
   // ---------- window + curtains ----------
   const wasOpen = R.windowState.open;
@@ -236,13 +269,22 @@
   let sfxOk = true;
   try { ['crumple', 'thump', 'swish', 'rattle', 'crunch', 'meow'].forEach(k => R.sfx[k]()); R.sfx.sash(true); R.sfx.drawer(false); } catch (e) { sfxOk = false; }
   log(sfxOk, 'paper, window, curtain, drawer, treat and meow sounds play');
-  const kd = (type, key) => { const e = new KeyboardEvent(type, { key, code: 'Key' + key.toUpperCase(), cancelable: true, bubbles: true }); window.dispatchEvent(e); return e; };
+  const kd = (type, key, code) => { const e = new KeyboardEvent(type, { key, code: code == null ? 'Key' + key.toUpperCase() : code, keyCode: key.toUpperCase().charCodeAt(0), cancelable: true, bubbles: true }); window.dispatchEvent(e); return e; };
   const typed = data => { const e = new InputEvent('beforeinput', { inputType: 'insertText', data, cancelable: true, bubbles: true }); window.dispatchEvent(e); return e; };
   const d1 = kd('keydown', 'q'), d2 = kd('keydown', 'q'), t1 = typed('q'), t2 = typed('q'); kd('keyup', 'q');
   log(!d1.defaultPrevented && d2.defaultPrevented && !t1.defaultPrevented && t2.defaultPrevented, 'doubled keystroke from Lively is dropped');
   await wait(120);
   const d3 = kd('keydown', 'q'), t3 = typed('q'); kd('keyup', 'q');
   log(!d3.defaultPrevented && !t3.defaultPrevented, 'a real second press of the same key still types');
+  // what Lively really sends: a whole second press, after the real keyup, with the extended bit (other code)
+  await wait(120);
+  const d4 = kd('keydown', 's'), t4 = typed('s'); kd('keyup', 's'); await wait(90);
+  const d5 = kd('keydown', 's', ''), t5 = typed('s'); kd('keyup', 's', '');
+  log(!d4.defaultPrevented && !t4.defaultPrevented && d5.defaultPrevented && t5.defaultPrevented, 'late Lively copy with a different key code is dropped');
+  await wait(120);
+  const d6 = kd('keydown', 's'), t6 = typed('s'); kd('keyup', 's'); await wait(90);
+  const d7 = kd('keydown', 's', ''), t7 = typed('s'); kd('keyup', 's', '');
+  log(!d6.defaultPrevented && !t6.defaultPrevented && d7.defaultPrevented && t7.defaultPrevented, 'and again on the next press (double letters still type once each)');
 
   // ---------- pomodoro → girl ----------
   click(find('focus timer'));
@@ -282,6 +324,26 @@
     log(S.peel < 0.02, 'click lifted rug → lays flat again');
     if (S.hidden !== start) { click(R.rug); await wait(800); step(2.2); await wait(500); }
   }
+
+  // poster flips over to the week; the makeover repaints; dress up changes her and the cat
+  { const card = R.clickable.find(o => /poster|my week/.test(o.userData.label || ''));
+    click(card); step(2);
+    log(R.store.get('posterSide') === 'week', 'click poster → flips to my week');
+    click(card); step(2);
+    log(R.store.get('posterSide') === 'front', 'click again → flips back'); }
+  { const before = R.decorParts.walls[0].material.map;
+    R.decor.open('wall'); document.querySelector('#decor .dsw:nth-child(4)').click();
+    log(R.decorParts.walls[0].material.map !== before && R.store.get('decor').wall.p === 'hearts', 'makeover: pick a wallpaper → walls repaint');
+    R.decor.set('wall', { p: 'sprigs', c: 0 }); R.decor.close(); }
+  { R.looks.show('dress');
+    log(R.girl.state === 'pose' && R.girl.root.visible, 'dress up tab → she steps onto the rug');
+    const hairBtn = [...document.querySelectorAll('#paneDress .drow')].find(r => r.textContent.startsWith('hair'));
+    hairBtn.querySelectorAll('button')[1].click();
+    log(R.girlLook().hair === 'bob', 'dress up: ▶ changes her hair', R.girlLook().hair);
+    const L = R.store.get('look', {}); delete L.girl; R.store.set('look', L); R.store.fire('look');
+    R.looks.show('focus');
+    log(R.girl.state === 'away', 'back to focus → she leaves'); }
+  log(!!document.getElementById('npPlay') && /▶|❚❚/.test(document.getElementById('npPlay').textContent), 'play/pause button next to the song');
 
   R.helper.call = realCall;
   log(errors === 0, 'no page errors', errors + ' errors');
