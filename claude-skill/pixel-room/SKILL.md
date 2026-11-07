@@ -5,7 +5,7 @@ description: Set up and personalise the Pixel Room Lively wallpaper. Use when th
 
 # Pixel Room
 
-The repo (https://github.com/chandranisaha/cozy-pixel-room; clone it first if the person doesn't have it) is a Three.js pixel-art bedroom that runs as a [Lively Wallpaper](https://www.rocksdanister.com/lively/) web wallpaper on Windows, plus an optional local PowerShell helper (`helper/cozy-helper.ps1`) for things a wallpaper can't do (desktop icons, Sticky Notes, links, calendars, photos, syncing two screens).
+The repo (https://github.com/chandranisaha/pixel-room; clone it first if the person doesn't have it) is a Three.js pixel-art bedroom that runs as a [Lively Wallpaper](https://www.rocksdanister.com/lively/) web wallpaper on Windows, plus an optional local PowerShell helper (`helper/cozy-helper.ps1`) for things a wallpaper can't do (desktop icons, Sticky Notes, links, calendars, photos, syncing two screens).
 
 ## First: find out what the person wants
 Ask in one short message what their room should have, if they haven't said: their photos or a Google Photos shared album, Spotify playlists, bookmarks for the shelf, Google/Outlook calendar, a different pet or colours, anything they want added. Don't ask about things they can change later.
