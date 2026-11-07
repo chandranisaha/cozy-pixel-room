@@ -15,9 +15,10 @@
   function tri(g, x, base, h, c) { g.fillStyle = c; for (let i = 0; i < h; i++) g.fillRect(x + i, base - i, (h - i) * 2, 1); }
   function flower(g, x, y, c) { g.fillStyle = '#5e8c5a'; g.fillRect(x, y + 2, 1, 32 - y); disc(g, x, y, 2, c); g.fillStyle = '#ffe7a0'; g.fillRect(x, y, 1, 1); }
   function catFace(g) {
-    g.fillStyle = '#e39a5a';
+    g.fillStyle = '#2a2632';
     g.fillRect(8, 10, 16, 14); g.fillRect(8, 6, 4, 4); g.fillRect(20, 6, 4, 4);
-    g.fillStyle = '#3a3560'; g.fillRect(12, 15, 2, 2); g.fillRect(18, 15, 2, 2);
+    g.fillStyle = '#f4f1ea'; g.fillRect(13, 17, 6, 7); g.fillRect(15, 12, 2, 5);
+    g.fillStyle = '#a8e06a'; g.fillRect(12, 15, 2, 2); g.fillRect(18, 15, 2, 2);
     g.fillStyle = '#e8607a'; g.fillRect(15, 18, 2, 1);
     g.fillStyle = '#fff'; g.fillRect(4, 18, 4, 1); g.fillRect(24, 18, 4, 1);
   }
